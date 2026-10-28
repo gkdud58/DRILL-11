@@ -6,9 +6,51 @@ import os
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
 
 
+class AutoRun:
+    # 자동 무적 런 상태: 키 입력 없이 좌우로 계속 달리며, 빠르고 크다
+    SPEED = 10
+    SCALE = 2
+    DURATION = 5.0
+
+    def __init__(self, boy):
+        self.boy = boy
+        self.start_time = 0
+
+    def enter(self):
+        self.boy.frame = 0
+        self.boy.dir = self.boy.face_dir
+        self.start_time = get_time()
+
+    def exit(self):
+        self.boy.dir = 0
+
+    def do(self):
+        boy = self.boy
+        boy.frame = (boy.frame + 1) % 8
+        boy.x += boy.dir * AutoRun.SPEED
+        # 화면 좌우 끝에서 자동 방향 전환
+        if boy.x >= 800:
+            boy.x = 800
+            boy.dir = -1
+        elif boy.x <= 0:
+            boy.x = 0
+            boy.dir = 1
+        boy.face_dir = boy.dir
+        if get_time() - self.start_time >= AutoRun.DURATION:
+            boy.time_out()
+
+    def draw(self):
+        boy = self.boy
+        row = 100 if boy.face_dir == 1 else 0
+        size = 100 * AutoRun.SCALE
+        # 커진 만큼 발이 땅에 붙도록 y 보정
+        boy.image.clip_draw(boy.frame * 100, row, 100, 100,
+                            boy.x, boy.y + (size - 100) / 2, size, size)
+
+
 class Boy:
     # 상태 목록
-    states = ['IDLE', 'SLEEP', 'RUN']
+    states = ['IDLE', 'SLEEP', 'RUN', 'AUTORUN']
     RUN_SPEED = 5
 
     def __init__(self):
@@ -19,16 +61,22 @@ class Boy:
         self.idle_start_time = 0
         self.keys = []  # 눌려 있는 방향키 (나중에 누른 키가 뒤에 온다)
         self.image = load_image('animation_sheet.png')
+        self.auto_run = AutoRun(self)
 
         # transitions 라이브러리로 상태 기계 구성
         self.machine = Machine(model=self, states=Boy.states,
                                initial='IDLE', auto_transitions=False)
         # IDLE 상태에서 5초가 지나면 SLEEP 상태로 전이
         self.machine.add_transition('time_out', 'IDLE', 'SLEEP')
+        # IDLE 상태에서 'a' 키를 누르면 AUTORUN 상태로 전이
+        self.machine.add_transition('a_down', 'IDLE', 'AUTORUN')
+        # AUTORUN 상태에서 5초가 지나면 IDLE 상태로 전이
+        self.machine.add_transition('time_out', 'AUTORUN', 'IDLE')
         # SLEEP 상태에서 스페이스바를 누르면 다시 IDLE 상태로 전이
         self.machine.add_transition('space_down', 'SLEEP', 'IDLE')
         # IDLE / SLEEP 상태에서 좌우 키를 누르면 RUN 상태로 전이
-        self.machine.add_transition('start_run', ['IDLE', 'SLEEP'], 'RUN')
+        # AUTORUN 상태에서 누르면 무적 런이 취소되고 눌린 방향의 RUN 상태가 된다
+        self.machine.add_transition('start_run', ['IDLE', 'SLEEP', 'AUTORUN'], 'RUN')
         # RUN 상태에서 방향키를 모두 떼면 IDLE 상태로 전이
         self.machine.add_transition('stop_run', 'RUN', 'IDLE')
         # 초기 상태는 on_enter 콜백이 호출되지 않으므로 직접 시작 시각 기록
@@ -47,6 +95,13 @@ class Boy:
     def on_enter_RUN(self):
         self.frame = 0
         self.apply_dir()
+
+    # --- AUTORUN 상태: 동작은 AutoRun 클래스에 위임
+    def on_enter_AUTORUN(self):
+        self.auto_run.enter()
+
+    def on_exit_AUTORUN(self):
+        self.auto_run.exit()
 
     def apply_dir(self):
         # 가장 최근에 누른 방향키를 따른다
