@@ -1,4 +1,4 @@
-from pico2d import load_image, get_time, SDL_KEYDOWN, SDL_KEYUP, SDLK_SPACE, SDLK_LEFT, SDLK_RIGHT
+from pico2d import load_image, get_time, SDL_KEYDOWN, SDL_KEYUP, SDLK_SPACE, SDLK_LEFT, SDLK_RIGHT, SDLK_a
 from transitions import Machine
 import math
 import os
@@ -115,6 +115,10 @@ class Boy:
                 # 자고 있을 때만 깨어난다 (IDLE에서는 무시)
                 if self.state == 'SLEEP':
                     self.space_down()
+            elif event.key == SDLK_a:
+                # IDLE 상태에서만 자동 무적 런 시작
+                if self.state == 'IDLE':
+                    self.a_down()
             elif event.key in (SDLK_LEFT, SDLK_RIGHT):
                 d = 1 if event.key == SDLK_RIGHT else -1
                 if d not in self.keys:
@@ -143,9 +147,13 @@ class Boy:
                 self.time_out()
         elif self.state == 'SLEEP':
             self.frame = (self.frame + 1) % 8
+        elif self.state == 'AUTORUN':
+            self.auto_run.do()
 
     def draw(self):
-        if self.state == 'SLEEP':
+        if self.state == 'AUTORUN':
+            self.auto_run.draw()
+        elif self.state == 'SLEEP':
             # 서 있는 모습을 90도 눕혀서 그린다 (얼굴이 위로 오도록 = 천장을 보고 누움)
             if self.face_dir == 1:
                 self.image.clip_composite_draw(self.frame * 100, 300, 100, 100,
